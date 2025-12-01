@@ -1,0 +1,5 @@
+{
+  "name": "Physics Optics Explorer",
+  "description": "An interactive study tool for Exam 3 covering Geometric and Physical Optics. Features interactive ray tracing, interference simulators, and AI-powered problem solving based on course materials.",
+  "requestFramePermissions": []
+}
