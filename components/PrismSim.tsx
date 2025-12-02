@@ -250,6 +250,3 @@ const PrismSim: React.FC = () => {
        </div>
     </div>
   );
-};
-
-export default PrismSim;
