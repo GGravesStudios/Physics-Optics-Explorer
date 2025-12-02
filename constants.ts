@@ -20,7 +20,7 @@ export const EQUATIONS: Record<Topic, EquationExtended[]> = {
     },
     { 
       name: "Critical Angle", 
-      latex: "\\sin\\theta_c = \\frac{n_2}{n_1}", 
+      latex: "\\theta_c = \\sin^{-1}\\!\\left(\\frac{n_2}{n_1}\\right)", 
       description: "For internal reflection (n1 > n2).",
       simple: "The angle where light gets trapped inside the denser material."
     },
@@ -32,7 +32,7 @@ export const EQUATIONS: Record<Topic, EquationExtended[]> = {
     },
     {
       name: "Apparent Depth (Slab)",
-      latex: "d' = d \\frac{n_2}{n_1}",
+      latex: "d_{\\text{app}} = d\\,\\frac{n_2}{n_1}",
       description: "Apparent shift in depth when viewing through a medium.",
       simple: "Objects look closer when underwater or in glass."
     }
@@ -40,13 +40,13 @@ export const EQUATIONS: Record<Topic, EquationExtended[]> = {
   [Topic.LENSES_MIRRORS]: [
     { 
       name: "Lens/Mirror Equation", 
-      latex: "\\frac{1}{p} + \\frac{1}{q} = \\frac{1}{f}", 
-      description: "Relates object (p), image (q), and focal length (f).",
+      latex: "\\frac{1}{d_o} + \\frac{1}{d_i} = \\frac{1}{f}", 
+      description: "Relates object distance, image distance, and focal length.",
       simple: "Calculates where the image forms."
     },
     { 
       name: "Magnification", 
-      latex: "m = -\\frac{q}{p} = \\frac{h_i}{h_o}", 
+      latex: "m = -\\frac{d_i}{d_o} = \\frac{h_i}{h_o}", 
       description: "Ratio of image height to object height.",
       simple: "Negative m means inverted. |m| > 1 means bigger."
     },
@@ -58,13 +58,13 @@ export const EQUATIONS: Record<Topic, EquationExtended[]> = {
     },
     { 
       name: "Lens Maker's Eq", 
-      latex: "\\frac{1}{f} = (n-1)\\left(\\frac{1}{R_1} - \\frac{1}{R_2}\\right)", 
+      latex: "\\frac{1}{f} = (n - 1)\\left(\\frac{1}{R_1} - \\frac{1}{R_2}\\right)", 
       description: "Focal length based on curvature.",
       simple: "Determines f based on the lens shape and material."
     },
     {
       name: "Two-Lens System",
-      latex: "\\frac{1}{f_{eff}} = \\frac{1}{f_1} + \\frac{1}{f_2} - \\frac{d}{f_1 f_2}",
+      latex: "\\frac{1}{f_{\\text{eff}}} = \\frac{1}{f_1} + \\frac{1}{f_2} - \\frac{d}{f_1 f_2}",
       description: "Effective focal length of two separated lenses.",
       simple: "How two lenses work together (like in a microscope)."
     }
@@ -81,16 +81,16 @@ export const EQUATIONS: Record<Topic, EquationExtended[]> = {
       latex: "a \\sin\\theta = m\\lambda", 
       description: "Condition for destructive diffraction (Dark spots).",
       simple: "Where the wave cancels itself out (Dark spots)."
-    },
+    }, 
     { 
       name: "Thin Film (Constructive)", 
-      latex: "2t = (m + \\frac{1}{2})\\frac{\\lambda}{n}", 
-      description: "Phase shift assumed (1 hard reflection).",
+      latex: "2nt = \\left(m + \\tfrac{1}{2}\\right)\\lambda", 
+      description: "One phase inversion; m = 0, 1, 2...",
       simple: "Why soap bubbles look colorful."
     },
     { 
       name: "Resolution (Rayleigh)", 
-      latex: "\\theta_{min} = \\frac{1.22\\lambda}{D}", 
+      latex: "\\theta_{\\min} = \\frac{1.22\\,\\lambda}{D}", 
       description: "Minimum angular separation.",
       simple: "The limit of detail a lens can resolve."
     },

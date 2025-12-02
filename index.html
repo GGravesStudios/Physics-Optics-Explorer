@@ -3,47 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Physics Optics Explorer</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      body {
-        background-color: #fffbeb; /* amber-50 */
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      }
-      /* Custom scrollbar for a cleaner look */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: rgba(0,0,0,0.05);
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgba(217, 119, 6, 0.5);
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgba(217, 119, 6, 0.8);
-      }
-      
-      /* Markdown Utilities */
-      .inline-markdown p {
-        display: inline;
-      }
-    </style>
-    <script type="importmap">
-    {
-      "imports": {
-        "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
-        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-        "react/": "https://aistudiocdn.com/react@^19.2.0/",
-        "react": "https://aistudiocdn.com/react@^19.2.0"
-      }
-    }
-    </script>
+    <title>Optics Explorer</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

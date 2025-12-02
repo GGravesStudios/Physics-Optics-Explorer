@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import Equation from './Equation';
+import MathDisplay from './MathDisplay';
 
 const InterferenceSim: React.FC = () => {
   const [mode, setMode] = useState<'single' | 'double'>('double');
@@ -136,26 +136,26 @@ const InterferenceSim: React.FC = () => {
          <div className="space-y-6">
             <div className="group">
                <label className="flex justify-between text-sm font-medium text-slate-700 mb-2 group-hover:text-amber-700 transition-colors">
-                  <span>Wavelength (<Equation latex="\lambda" inline />)</span>
+                  <span>Wavelength (<MathDisplay latex="\lambda" inline />)</span>
                   <span className="text-amber-600 font-mono text-xs bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">{wavelength} nm</span>
                </label>
                <input aria-label="Wavelength" type="range" min="380" max="750" value={wavelength} onChange={(e) => setWavelength(Number(e.target.value))} className="w-full accent-amber-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
                <div className="h-1.5 w-full rounded-full mt-2 opacity-80" style={{background: 'linear-gradient(to right, #8b5cf6, #3b82f6, #22c55e, #eab308, #f97316, #ef4444)'}}></div>
             </div>
 
-            <div className="group">
+               <div className="group">
                <label className="flex justify-between text-sm font-medium text-slate-700 mb-2 group-hover:text-amber-700 transition-colors">
-                  <span>Slit Width (<Equation latex="a" inline />)</span>
-                  <span className="text-amber-600 font-mono text-xs bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">{width} $\mu$m</span>
+                  <span>Slit Width (<MathDisplay latex="a" inline />)</span>
+                  <span className="text-amber-600 font-mono text-xs bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">{width} µm</span>
                </label>
                <input aria-label="Slit Width" type="range" min="2" max="50" step="1" value={width} onChange={(e) => setWidth(Number(e.target.value))} className="w-full accent-amber-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
             </div>
 
-            {mode === 'double' && (
+               {mode === 'double' && (
                <div className="group animate-fade-in">
                   <label className="flex justify-between text-sm font-medium text-slate-700 mb-2 group-hover:text-amber-700 transition-colors">
-                     <span>Slit Separation (<Equation latex="d" inline />)</span>
-                     <span className="text-amber-600 font-mono text-xs bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">{separation} $\mu$m</span>
+                     <span>Slit Separation (<MathDisplay latex="d" inline />)</span>
+                     <span className="text-amber-600 font-mono text-xs bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">{separation} µm</span>
                   </label>
                   <input aria-label="Slit Separation" type="range" min={width + 5} max="100" value={separation} onChange={(e) => setSeparation(Math.max(width + 5, Number(e.target.value)))} className="w-full accent-amber-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
                   <p className="text-[10px] text-slate-400 mt-1">Distance between slit centers</p>
@@ -165,9 +165,9 @@ const InterferenceSim: React.FC = () => {
             <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-xs text-amber-900 leading-relaxed shadow-sm">
                <p className="font-bold mb-1 uppercase tracking-wide text-amber-800/60 text-[10px]">Physics Concept</p>
                {mode === 'double' ? (
-                  <p>Double-slit creates narrow <strong className="text-amber-700">interference fringes</strong> (cosine term) inside a wider <strong className="text-amber-700">diffraction envelope</strong> (sinc term). Notice how changing <Equation latex="d" inline /> changes fringe density.</p>
+                  <p>Double-slit creates narrow <strong className="text-amber-700">interference fringes</strong> (cosine term) inside a wider <strong className="text-amber-700">diffraction envelope</strong> (sinc term). Notice how changing <MathDisplay latex="d" inline /> changes fringe density.</p>
                ) : (
-                   <p>Single slit creates a wide central maximum. A <strong className="text-amber-700">narrower slit (<Equation latex="a" inline />)</strong> spreads the light out more due to diffraction (<Equation latex="\theta \approx \lambda/a" inline />).</p>
+                   <p>Single slit creates a wide central maximum. A <strong className="text-amber-700">narrower slit (<MathDisplay latex="a" inline />)</strong> spreads the light out more due to diffraction (<MathDisplay latex="\\theta \\approx \\frac{\\lambda}{a}" inline />).</p>
                )}
             </div>
          </div>

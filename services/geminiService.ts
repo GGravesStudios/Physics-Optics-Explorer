@@ -25,7 +25,7 @@ export const generateExplanation = async (prompt: string, context: string): Prom
   try {
     const client = getClient();
     const fullPrompt = `
-      Context: Physics 4C Optics Exam. 
+      Context: Optics Exam. 
       Topic Constraints: ${context}
       User Question: ${prompt}
       
@@ -37,7 +37,7 @@ export const generateExplanation = async (prompt: string, context: string): Prom
       model: 'gemini-2.5-flash',
       contents: fullPrompt,
     }));
-    
+
     return response.text || "I couldn't generate an explanation at this moment.";
   } catch (error) {
     console.error("Gemini Text Error:", error);
@@ -75,10 +75,10 @@ export const generateDiagram = async (description: string): Promise<string | nul
 };
 
 export const generatePracticeProblem = async (topic: string): Promise<string> => {
-   try {
+  try {
     const client = getClient();
     const prompt = `
-      Create a unique practice problem for Physics 4C Exam 3.
+      Create a unique practice problem for Optics Exam.
       Topic: ${topic}.
       Difficulty: University Physics level.
       Format:
@@ -90,7 +90,7 @@ export const generatePracticeProblem = async (topic: string): Promise<string> =>
       model: 'gemini-2.5-flash',
       contents: prompt,
     }));
-    
+
     return response.text || "Could not generate a problem.";
   } catch (error) {
     console.error("Gemini Problem Error:", error);

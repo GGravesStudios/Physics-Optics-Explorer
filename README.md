@@ -1,20 +1,23 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Optics Explorer
 
-# Run and deploy your AI Studio app
+Interactive study tool for optics topics built with React, TypeScript, Vite, and Tailwind. Explore labs for geometric optics, wave interference, and refraction while keeping a clean formula sheet and AI tutor beside you.
 
-This contains everything you need to run your app locally.
+## Features
+- Geometric optics lab: single optic, glass slab, and two-lens ray tracing with live diagrams.
+- Wave optics lab: single/double slit diffraction and interference intensity plots.
+- Refraction & prism lab: Snell's law, total internal reflection, and deviation visualized.
+- Equation sidebar: consistent LaTeX-rendered formula sheet across all modules.
+- AI tutor: Gemini-powered explanations, practice problems, and diagram requests with KaTeX math rendering.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1PZbwh__gLz9cveIB5MqbsuyExyFuHyQq
+## Tech Stack
+- React + TypeScript + Vite
+- Tailwind CSS for styling
+- KaTeX for equation rendering
+- React Markdown + remark-math for inline/block math in chat
+- Gemini API integration for tutoring and diagram prompts
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Setup
+1. Install dependencies: `npm install`
+2. Create `.env.local` and set `GEMINI_API_KEY=<your key>`
+3. Run the dev server: `npm run dev`
+4. Build for production: `npm run build`

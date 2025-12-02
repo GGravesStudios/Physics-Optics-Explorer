@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import Equation from './Equation';
+import MathDisplay from './MathDisplay';
 
 const PrismSim: React.FC = () => {
   const [nPrism, setNPrism] = useState(1.50); // Glass
@@ -129,7 +129,7 @@ const PrismSim: React.FC = () => {
              <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 space-y-4">
                 <div className="group">
                    <label className="flex justify-between text-sm font-medium text-slate-700 group-hover:text-amber-700 transition-colors">
-                      <span>Prism Index (<Equation latex="n_2" inline />)</span>
+                      <span>Prism Index (<MathDisplay latex="n_2" inline />)</span>
                       <span className="text-amber-700 font-mono text-xs bg-white px-1.5 py-0.5 rounded border border-amber-100">{nPrism.toFixed(2)}</span>
                    </label>
                    <input aria-label="Prism Index" type="range" min="1.0" max="2.5" step="0.01" value={nPrism} onChange={(e) => setNPrism(Number(e.target.value))} className="w-full accent-amber-600 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"/>
@@ -137,21 +137,21 @@ const PrismSim: React.FC = () => {
                 </div>
                 <div className="group">
                    <label className="flex justify-between text-sm font-medium text-slate-700 group-hover:text-amber-700 transition-colors">
-                      <span>Environment (<Equation latex="n_1" inline />)</span>
+                      <span>Environment (<MathDisplay latex="n_1" inline />)</span>
                       <span className="text-amber-700 font-mono text-xs bg-white px-1.5 py-0.5 rounded border border-amber-100">{nEnv.toFixed(2)}</span>
                    </label>
                    <input aria-label="Environment Index" type="range" min="1.0" max="1.5" step="0.01" value={nEnv} onChange={(e) => setNEnv(Number(e.target.value))} className="w-full accent-amber-600 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"/>
                 </div>
                 <div className="group">
                    <label className="flex justify-between text-sm font-medium text-slate-700 group-hover:text-amber-700 transition-colors">
-                      <span>Apex Angle (<Equation latex="A" inline />)</span>
+                      <span>Apex Angle (<MathDisplay latex="A" inline />)</span>
                       <span className="text-amber-700 font-mono text-xs bg-white px-1.5 py-0.5 rounded border border-amber-100">{angleA}°</span>
                    </label>
                    <input aria-label="Apex Angle" type="range" min="30" max="90" step="1" value={angleA} onChange={(e) => setAngleA(Number(e.target.value))} className="w-full accent-amber-600 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"/>
                 </div>
                 <div className="group">
                    <label className="flex justify-between text-sm font-medium text-slate-700 group-hover:text-amber-700 transition-colors">
-                      <span>Incident Angle (<Equation latex="\theta_1" inline />)</span>
+                      <span>Incident Angle (<MathDisplay latex="\theta_1" inline />)</span>
                       <span className="text-amber-700 font-mono text-xs bg-white px-1.5 py-0.5 rounded border border-amber-100">{incidentAngle}°</span>
                    </label>
                    <input aria-label="Incident Angle" type="range" min="0" max="85" step="1" value={incidentAngle} onChange={(e) => setIncidentAngle(Number(e.target.value))} className="w-full accent-amber-600 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"/>
@@ -162,15 +162,15 @@ const PrismSim: React.FC = () => {
                 <h4 className="font-bold text-amber-400 mb-2 border-b border-slate-600 pb-1 font-sans">Calculations</h4>
                 <ul className="space-y-2 text-xs">
                    <li className="flex justify-between">
-                      <span className="text-slate-400">Refraction 1 (<Equation latex="\theta_2" inline />):</span>
+                      <span className="text-slate-400">Refraction 1 (<MathDisplay latex="\theta_2" inline />):</span>
                       <span>{result.stage === 'entry' ? 'TIR' : ((result.theta2Rad! * 180)/Math.PI).toFixed(1)}°</span>
                    </li>
                    <li className="flex justify-between">
-                      <span className="text-slate-400">Internal Angle (<Equation latex="\theta_3" inline />):</span>
+                      <span className="text-slate-400">Internal Angle (<MathDisplay latex="\theta_3" inline />):</span>
                       <span>{result.theta3Rad ? ((result.theta3Rad * 180)/Math.PI).toFixed(1) : '-'}°</span>
                    </li>
                    <li className="flex justify-between">
-                      <span className="text-slate-400">Exit Angle (<Equation latex="\theta_4" inline />):</span>
+                      <span className="text-slate-400">Exit Angle (<MathDisplay latex="\theta_4" inline />):</span>
                       <span className={result.isTIR ? "text-red-400 font-bold" : "text-green-400"}>
                           {result.isTIR ? "TIR (Trapped)" : result.theta4Rad !== undefined ? ((result.theta4Rad * 180)/Math.PI).toFixed(1) + "°" : "-"}
                       </span>
@@ -183,7 +183,7 @@ const PrismSim: React.FC = () => {
                    )}
                    {!result.isTIR && (
                        <li className="flex justify-between border-t border-slate-600 pt-1 mt-1">
-                          <span className="text-slate-300">Deviation (<Equation latex="\delta" inline />):</span>
+                          <span className="text-slate-300">Deviation (<MathDisplay latex="\delta" inline />):</span>
                           <span className="text-amber-300 font-bold">{result.deviationDeg?.toFixed(1)}°</span>
                        </li>
                    )}
