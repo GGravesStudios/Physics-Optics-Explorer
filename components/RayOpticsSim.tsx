@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import MathDisplay from './MathDisplay';
+import { calculatePrincipalRays, OpticParams, Ray, C_INCIDENT, C_REFRACTED, C_VIRTUAL } from '../src/utils/opticsEngine';
 
 type SystemMode = 'single' | 'slab' | 'two-lens';
 
@@ -46,69 +47,67 @@ const RayOpticsSim: React.FC = () => {
     const [slabThickness, setSlabThickness] = useState(150);
     const [slabIndex, setSlabIndex] = useState(1.5);
 
+    // Viewport State
+    const [viewBox, setViewBox] = useState({ x: -400, y: -250, w: 800, h: 500 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const svgRef = useRef<SVGSVGElement>(null);
+
     // --- Physics Engines (Memoized) ---
 
     // 1. Single Lens/Mirror Calculation
     const singleOpticResult = useMemo(() => {
-        const f = subType === 'plane' ? Infinity : (subType === 'converging' ? 1 : -1) * focalLengthMag;
-
-        // Plane Mirror Special Case
-        if (subType === 'plane') {
-            return { q: -objDist, m: 1, f: Infinity, type: 'Virtual', orientation: 'Upright', description: 'Virtual image behind mirror' };
-        }
-
-        // Thin lens: 1/d_o + 1/d_i = 1/f -> d_i = d_o f / (d_o - f)
-        let q = Infinity;
-        if (Math.abs(objDist - f) > 0.1) {
-            q = (objDist * f) / (objDist - f);
-        }
-
-        const m = isFinite(q) ? -q / objDist : Infinity;
-        const isReal = (opticType === 'lens' && q > 0) || (opticType === 'mirror' && q > 0);
-        const type = isReal ? 'Real' : 'Virtual';
-        const orientation = m < 0 ? 'Inverted' : 'Upright';
-        const description = isReal ? "Projectable on screen" : "Visible looking into optic";
-
-        return { q, m, f, type, orientation, description };
-    }, [objDist, focalLengthMag, opticType, subType]);
+        const params: OpticParams = {
+            objX: -objDist,
+            objY: objHeight,
+            opticX: 0,
+            f: focalLengthMag * (subType === 'diverging' ? -1 : 1),
+            opticType,
+            subType
+        };
+        return calculatePrincipalRays(params);
+    }, [objDist, objHeight, focalLengthMag, opticType, subType]);
 
     // 2. Two-Lens System Calculation
     const twoLensResult = useMemo(() => {
-        // Lens 1 (Converging, fixed at x=0)
-        const f1 = focalLengthMag;
-        const p1 = objDist;
+        // Lens 1
+        const p1: OpticParams = {
+            objX: -objDist,
+            objY: objHeight,
+            opticX: 0,
+            f: focalLengthMag, // Assuming converging
+            opticType: 'lens',
+            subType: 'converging'
+        };
+        const l1Result = calculatePrincipalRays(p1);
 
-        // Calculate Intermediate Image
-        let q1 = Infinity;
-        if (Math.abs(p1 - f1) > 0.1) {
-            q1 = (p1 * f1) / (p1 - f1);
-        }
+        // Calculate Image 1 position (if real, it's positive from opticX, if virtual, negative)
+        const i1X = p1.opticX + l1Result.q;
+        const i1Y = l1Result.m * objHeight;
 
-        // Lens 2 (Converging, at x = lensSep)
-        const f2 = lens2F;
-        let p2: number, q2: number, M_total: number;
+        // Lens 2
+        const p2: OpticParams = {
+            objX: i1X,
+            objY: i1Y,
+            opticX: lensSep,
+            f: lens2F, // Assuming converging
+            opticType: 'lens',
+            subType: 'converging'
+        };
+        const l2Result = calculatePrincipalRays(p2);
 
-        // If q1 is infinite (collimated beam between lenses)
-        if (!isFinite(q1)) {
-            p2 = Infinity;
-            q2 = f2;
-            M_total = -f2 / f1; // Telescope angular mag approx
-        } else {
-            p2 = lensSep - q1; // Object distance for L2
+        // Final total mag
+        const M_total = l1Result.m * l2Result.m;
 
-            if (Math.abs(p2 - f2) < 0.1) {
-                q2 = Infinity;
-                M_total = Infinity;
-            } else {
-                q2 = (p2 * f2) / (p2 - f2);
-                const m1 = -q1 / p1;
-                const m2 = -q2 / p2;
-                M_total = m1 * m2;
-            }
-        }
-
-        return { q1, p2, q2, M_total };
-    }, [objDist, focalLengthMag, lens2F, lensSep]);
+        return {
+            l1Result,
+            l2Result,
+            M_total,
+            q1: l1Result.q,
+            p2: lensSep - i1X,
+            q2: l2Result.q
+        };
+    }, [objDist, objHeight, focalLengthMag, lens2F, lensSep]);
 
     // 3. Slab Calculation
     const slabResult = useMemo(() => {
@@ -120,100 +119,11 @@ const RayOpticsSim: React.FC = () => {
 
     // --- Ray Tracing Generation (Memoized) ---
     const rays = useMemo(() => {
-        type Ray = { x1: number, y1: number, x2: number, y2: number, stroke: string, dashed?: boolean, opacity?: number };
         const r: Ray[] = [];
-        const VIEW_LIMIT = 800;
+        const VIEW_LIMIT = 2000;
 
         if (systemMode === 'single') {
-            const { f, q } = singleOpticResult;
-            const objX = -objDist;
-            const objY = objHeight;
-
-            // --- DIVERGING LENS (Concave) ---
-            if (opticType === 'lens' && subType === 'diverging') {
-                const fMag = Math.abs(f);
-
-                // Ray 1: Parallel -> Diverge from near focal point
-                // Incident
-                r.push({ x1: objX, y1: objY, x2: 0, y2: objY, stroke: "#d97706" });
-
-                // Refracted (Diverging)
-                // Slope determined by virtual source at (-fMag, 0)
-                // m = (y2 - y1) / (x2 - x1) = (objY - 0) / (0 - (-fMag)) = objY / fMag
-                const slope1 = objY / fMag;
-                const exitX1 = VIEW_LIMIT;
-                const exitY1 = objY + slope1 * exitX1;
-                r.push({ x1: 0, y1: objY, x2: exitX1, y2: exitY1, stroke: "#d97706" });
-
-                // Traceback to focal point
-                r.push({ x1: -fMag, y1: 0, x2: 0, y2: objY, stroke: "#d97706", dashed: true, opacity: 0.4 });
-
-                // Ray 2: Through Center (Undeviated)
-                const slope2 = objY / objX; // Negative slope
-                const exitX2 = VIEW_LIMIT;
-                const exitY2 = slope2 * exitX2;
-                r.push({ x1: objX, y1: objY, x2: exitX2, y2: exitY2, stroke: "#ea580c" });
-
-                // Ray 3: Towards Far Focal Point -> Parallel
-                // Incident (virtual target is +fMag)
-                // Slope to hit (+fMag, 0) from (objX, objY)
-                const slope3 = (0 - objY) / (fMag - objX);
-                const hitY3 = objY + slope3 * (0 - objX); // y-intercept at lens
-
-                r.push({ x1: objX, y1: objY, x2: 0, y2: hitY3, stroke: "#b45309" });
-                // Dashed extension towards far focal point
-                r.push({ x1: 0, y1: hitY3, x2: fMag, y2: 0, stroke: "#b45309", dashed: true, opacity: 0.3 });
-
-                // Refracted (Parallel)
-                r.push({ x1: 0, y1: hitY3, x2: VIEW_LIMIT, y2: hitY3, stroke: "#b45309" });
-
-                // Traceback for Ray 3 (to find image)
-                r.push({ x1: -VIEW_LIMIT, y1: hitY3, x2: 0, y2: hitY3, stroke: "#b45309", dashed: true, opacity: 0.4 });
-
-            } else {
-                // --- CONVERGING LENS & MIRRORS ---
-                // Ray 1: Parallel to Axis -> Through Focal Point
-                r.push({ x1: objX, y1: objY, x2: 0, y2: objY, stroke: "#d97706" }); // Incident
-
-                if (subType === 'plane') {
-                    r.push({ x1: 0, y1: objY, x2: -VIEW_LIMIT, y2: objY, stroke: "#d97706" }); // Reflection
-                } else {
-                    const slope = -objY / f;
-                    const direction = opticType === 'lens' ? 1 : -1;
-                    const exitX = direction * VIEW_LIMIT;
-                    const exitY = objY + slope * (exitX - 0);
-
-                    r.push({ x1: 0, y1: objY, x2: exitX, y2: exitY, stroke: "#d97706" });
-
-                    // Virtual Traceback
-                    if ((opticType === 'lens' && f < 0) || (opticType === 'mirror')) {
-                        const backX = -direction * VIEW_LIMIT;
-                        const backY = objY + slope * (backX - 0);
-                        r.push({ x1: 0, y1: objY, x2: backX, y2: backY, stroke: "#d97706", dashed: true, opacity: 0.3 });
-                    }
-                }
-
-                // Ray 2: Through Center (Lens) or Vertex (Mirror)
-                if (opticType === 'lens') {
-                    const slope = objY / objX;
-                    const exitX = VIEW_LIMIT;
-                    const exitY = slope * exitX;
-                    r.push({ x1: objX, y1: objY, x2: exitX, y2: exitY, stroke: "#ea580c" });
-
-                    if (q < 0 && isFinite(q)) {
-                        r.push({ x1: 0, y1: 0, x2: -VIEW_LIMIT, y2: -slope * VIEW_LIMIT, stroke: "#ea580c", dashed: true, opacity: 0.3 });
-                    }
-                } else {
-                    // Mirror Vertex (i=r)
-                    const slope = -(objY / objX);
-                    const exitX = -VIEW_LIMIT;
-                    const exitY = slope * exitX;
-                    r.push({ x1: objX, y1: objY, x2: 0, y2: 0, stroke: "#ea580c" });
-                    r.push({ x1: 0, y1: 0, x2: exitX, y2: exitY, stroke: "#ea580c" });
-                    r.push({ x1: 0, y1: 0, x2: VIEW_LIMIT, y2: -slope * VIEW_LIMIT, stroke: "#ea580c", dashed: true, opacity: 0.3 });
-                }
-            }
-
+            r.push(...singleOpticResult.rays);
         } else if (systemMode === 'slab') {
             const startX = -objDist;
             const startY = objHeight;
@@ -238,31 +148,145 @@ const RayOpticsSim: React.FC = () => {
             r.push({ x1: face1X, y1: hitY, x2: VIEW_LIMIT, y2: hitY + slopeIn * (VIEW_LIMIT - face1X), stroke: "#94a3b8", dashed: true, opacity: 0.3 });
 
         } else if (systemMode === 'two-lens') {
-            const objX = -objDist;
-            const objY = objHeight;
-            const L1X = 0;
-            const L2X = lensSep;
-            const f1 = focalLengthMag;
-            const f2 = lens2F;
+            // Lens 1 Rays
+            r.push(...twoLensResult.l1Result.rays);
 
-            // Ray 1
-            r.push({ x1: objX, y1: objY, x2: L1X, y2: objY, stroke: "#d97706" });
-            const m1 = -objY / f1;
-            const hitY2 = objY + m1 * (L2X - L1X);
-            r.push({ x1: L1X, y1: objY, x2: L2X, y2: hitY2, stroke: "#d97706" });
-            const m2 = m1 - (hitY2 / f2);
-            r.push({ x1: L2X, y1: hitY2, x2: VIEW_LIMIT, y2: hitY2 + m2 * (VIEW_LIMIT - L2X), stroke: "#d97706" });
-
-            // Ray 2
-            const mC1 = objY / objX;
-            const hitY2_C = mC1 * (L2X - L1X);
-            r.push({ x1: objX, y1: objY, x2: L2X, y2: hitY2_C, stroke: "#ea580c" });
-            const mC2 = mC1 - (hitY2_C / f2);
-            r.push({ x1: L2X, y1: hitY2_C, x2: VIEW_LIMIT, y2: hitY2_C + mC2 * (VIEW_LIMIT - L2X), stroke: "#ea580c" });
+            // Render virtual traceback from Lens 2 (Optional filtering could happen here)
+            r.push(...twoLensResult.l2Result.rays.map(ray => ({
+                ...ray,
+                // Color virtual extensions clearly
+                stroke: ray.stroke === C_INCIDENT ? "#f59e0b" : ray.stroke // Orange for incident to L2
+            })));
         }
 
         return r;
-    }, [systemMode, objDist, objHeight, focalLengthMag, lens2F, lensSep, slabIndex, slabThickness, opticType, subType, singleOpticResult.f, singleOpticResult.q]);
+    }, [systemMode, singleOpticResult, twoLensResult, slabIndex, slabThickness, objDist, objHeight]);
+
+
+    // --- Viewport Orientation Controls ---
+    const handleWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+        // Prevent default scrolling via css, handle zoom
+        e.preventDefault();
+        const zoomRate = 0.1;
+        const zoomFactor = e.deltaY > 0 ? (1 + zoomRate) : (1 - zoomRate);
+
+        setViewBox(prev => {
+            // Zoom towards center
+            const newW = prev.w * zoomFactor;
+            const newH = prev.h * zoomFactor;
+            const newX = prev.x + (prev.w - newW) / 2;
+            const newY = prev.y + (prev.h - newH) / 2;
+
+            // Limit bounds prevent crazy zoom out/in
+            if (newW > 10000 || newW < 100) return prev;
+            return { x: newX, y: newY, w: newW, h: newH };
+        });
+    }, []);
+
+    const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+        setIsDragging(true);
+        setDragStart({ x: e.clientX, y: e.clientY });
+    };
+
+    const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+        if (!isDragging || !svgRef.current) return;
+
+        const dx = e.clientX - dragStart.x;
+        const dy = e.clientY - dragStart.y;
+        setDragStart({ x: e.clientX, y: e.clientY });
+
+        // Calculate mapped drag based on SVG width
+        const rect = svgRef.current.getBoundingClientRect();
+        const scaleX = viewBox.w / rect.width;
+        const scaleY = viewBox.h / rect.height;
+
+        setViewBox(prev => ({
+            ...prev,
+            x: prev.x - dx * scaleX,
+            y: prev.y + dy * scaleY // Invert Y because SVG transform scale(1,-1)
+        }));
+    };
+
+    const handleMouseUp = () => {
+        setIsDragging(false);
+    };
+
+    const autoFitView = () => {
+        if (rays.length === 0) return;
+
+        let minX = -objDist;
+        let maxX = 0;
+        let minY = 0;
+        let maxY = objHeight;
+
+        // Traverse all rays to find bounds
+        rays.forEach(r => {
+            // Don't let infinite beams ruin the bounds
+            if (r.x1 > -5000 && r.x1 < 5000) {
+                minX = Math.min(minX, r.x1);
+                maxX = Math.max(maxX, r.x1);
+            }
+            if (r.x2 > -5000 && r.x2 < 5000) {
+                minX = Math.min(minX, r.x2);
+                maxX = Math.max(maxX, r.x2);
+            }
+            if (r.y1 > -5000 && r.y1 < 5000) {
+                minY = Math.min(minY, r.y1);
+                maxY = Math.max(maxY, r.y1);
+            }
+            if (r.y2 > -5000 && r.y2 < 5000) {
+                minY = Math.min(minY, r.y2);
+                maxY = Math.max(maxY, r.y2);
+            }
+        });
+
+        // Ensure focal points are included
+        const elementsToCheckX = [
+            -focalLengthMag, focalLengthMag,
+            systemMode === 'two-lens' ? lensSep : 0,
+            systemMode === 'two-lens' ? lensSep - lens2F : 0,
+            systemMode === 'two-lens' ? lensSep + lens2F : 0,
+            singleOpticResult.q > -5000 && singleOpticResult.q < 5000 ? singleOpticResult.q : 0,
+            twoLensResult.q2 > -5000 && twoLensResult.q2 < 5000 ? twoLensResult.q2 + lensSep : 0
+        ];
+
+        elementsToCheckX.forEach(x => {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+        });
+
+        // Calculate padding
+        const paddingX = Math.max(50, (maxX - minX) * 0.15);
+        const paddingY = Math.max(50, (maxY - minY) * 0.25);
+
+        let finalW = (maxX - minX) + 2 * paddingX;
+        let finalH = (maxY - minY) + 2 * paddingY;
+
+        // Ensure Aspect Ratio is roughly maintained
+        const targetAspect = 800 / 500;
+        if (finalW / finalH > targetAspect) {
+            finalH = finalW / targetAspect;
+        } else {
+            finalW = finalH * targetAspect;
+        }
+
+        const finalX = minX - paddingX;
+        // SVG Y is inverted and center is weird, so we roughly balance
+        const finalY = (minY + maxY) / 2 - (finalH / 2);
+
+        setViewBox({
+            x: finalX,
+            y: finalY,
+            w: finalW,
+            h: finalH
+        });
+    };
+
+    // Auto-fit on significant layout changes
+    useEffect(() => {
+        autoFitView();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [systemMode]);
 
 
     return (
@@ -289,6 +313,21 @@ const RayOpticsSim: React.FC = () => {
                             {m === 'two-lens' ? 'Two-Lens System' : m === 'single' ? 'Single Optic' : 'Glass Slab'}
                         </button>
                     ))}
+                    <div className="w-px bg-slate-300 mx-2" />
+                    <button
+                        onClick={autoFitView}
+                        className="px-3 py-1.5 text-slate-500 hover:text-slate-700 rounded-md transition whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-amber-200"
+                        title="Auto-Fit System in Viewport"
+                    >
+                        ⛶ Fit
+                    </button>
+                    <button
+                        onClick={() => setViewBox({ x: -400, y: -250, w: 800, h: 500 })}
+                        className="px-3 py-1.5 text-slate-500 hover:text-slate-700 rounded-md transition whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-amber-200"
+                        title="Reset Viewport"
+                    >
+                        ↻ Reset
+                    </button>
                 </div>
             </div>
 
@@ -435,7 +474,7 @@ const RayOpticsSim: React.FC = () => {
                                 </li>
                                 <li className="flex justify-between">
                                     <span className="text-slate-400">Type:</span>
-                                    <span>{singleOpticResult.type} ({singleOpticResult.orientation})</span>
+                                    <span>{singleOpticResult.type}</span>
                                 </li>
                                 <li className="pt-2 text-[10px] text-slate-500 italic border-t border-slate-700/50">
                                     {singleOpticResult.description}
@@ -477,15 +516,27 @@ const RayOpticsSim: React.FC = () => {
                 </div>
 
                 {/* Visualizer */}
-                <div className="lg:col-span-8 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden relative min-h-[400px] shadow-sm">
-                    <svg viewBox="-400 -250 800 500" className="w-full h-full preserve-3d absolute inset-0" style={{ transform: 'scale(1, -1)' }} aria-label="Optics Simulation Canvas">
+                <div className="lg:col-span-8 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden relative min-h-[400px] shadow-sm cursor-grab active:cursor-grabbing">
+                    <svg
+                        ref={svgRef}
+                        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+                        className="w-full h-full preserve-3d absolute inset-0"
+                        style={{ transform: 'scale(1, -1)', touchAction: 'none' }}
+                        aria-label="Optics Simulation Canvas"
+                        onWheel={handleWheel}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                    >
                         <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
                             <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e2e8f0" strokeWidth="1" />
                         </pattern>
-                        <rect x="-400" y="-250" width="800" height="500" fill="url(#grid)" />
+                        {/* Make grid expansive to cover panning */}
+                        <rect x="-10000" y="-10000" width="20000" height="20000" fill="url(#grid)" />
 
-                        <line x1="-400" y1="0" x2="400" y2="0" stroke="#cbd5e1" strokeWidth="2" />
-                        <line x1="0" y1="-250" x2="0" y2="250" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4" />
+                        <line x1="-10000" y1="0" x2="10000" y2="0" stroke="#cbd5e1" strokeWidth="2" />
+                        <line x1="0" y1="-10000" x2="0" y2="10000" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4" />
 
                         {/* Object */}
                         <g>
@@ -512,6 +563,24 @@ const RayOpticsSim: React.FC = () => {
                                         strokeWidth="4"
                                         strokeLinecap="round"
                                     />
+                                )}
+
+                                {/* Focal Points (F) and Center of Curvature (C) */}
+                                {subType !== 'plane' && (
+                                    <g>
+                                        <circle cx={focalLengthMag * (subType === 'diverging' ? -1 : 1)} cy="0" r="3" fill="#000" />
+                                        <text x={focalLengthMag * (subType === 'diverging' ? -1 : 1)} y="-10" textAnchor="middle" fill="#000" fontSize="12" fontWeight="bold" transform="scale(1,-1)">F</text>
+
+                                        <circle cx={-focalLengthMag * (subType === 'diverging' ? -1 : 1)} cy="0" r="3" fill="#000" />
+                                        <text x={-focalLengthMag * (subType === 'diverging' ? -1 : 1)} y="-10" textAnchor="middle" fill="#000" fontSize="12" fontWeight="bold" transform="scale(1,-1)">F'</text>
+
+                                        {opticType === 'mirror' && (
+                                            <>
+                                                <circle cx={2 * focalLengthMag * (subType === 'diverging' ? -1 : 1)} cy="0" r="3" fill="#000" />
+                                                <text x={2 * focalLengthMag * (subType === 'diverging' ? -1 : 1)} y="-10" textAnchor="middle" fill="#000" fontSize="12" fontWeight="bold" transform="scale(1,-1)">C</text>
+                                            </>
+                                        )}
+                                    </g>
                                 )}
 
                                 {isFinite(singleOpticResult.q) && Math.abs(singleOpticResult.q) < 5000 && (
@@ -563,7 +632,22 @@ const RayOpticsSim: React.FC = () => {
 
                                 {/* Images */}
                                 {isFinite(twoLensResult.q1) && (
-                                    <circle cx={twoLensResult.q1} cy="0" r="3" fill="#cbd5e1" />
+                                    <g opacity={0.7}>
+                                        <line
+                                            x1={twoLensResult.q1} // Q1 is calculated relative to Lens 1 (which is at x=0)
+                                            y1="0"
+                                            x2={twoLensResult.q1}
+                                            y2={twoLensResult.l1Result.m * objHeight}
+                                            stroke="#cbd5e1"
+                                            strokeWidth="2"
+                                            strokeDasharray="4"
+                                        />
+                                        <circle
+                                            cx={twoLensResult.q1}
+                                            cy={twoLensResult.l1Result.m * objHeight}
+                                            r="3"
+                                            fill="#94a3b8" />
+                                    </g>
                                 )}
                                 {isFinite(twoLensResult.q2) && (
                                     <g opacity={0.7}>
@@ -586,7 +670,6 @@ const RayOpticsSim: React.FC = () => {
                             </g>
                         )}
 
-                        {/* Rays */}
                         {rays.map((ray, i) => (
                             <line
                                 key={i}
