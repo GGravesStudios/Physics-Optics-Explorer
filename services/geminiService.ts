@@ -1,13 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-
-const getClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error("API_KEY is missing from environment");
-    throw new Error("API Key missing");
-  }
-  return new GoogleGenAI({ apiKey });
-};
 
 // Retry helper for robust API calls
 async function withRetry<T>(operation: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
@@ -21,9 +11,15 @@ async function withRetry<T>(operation: () => Promise<T>, retries = 3, delay = 10
   }
 }
 
+const getApiKey = () => {
+  // @ts-ignore - process is injected by Vite in some configs, or meta.env
+  const key = (typeof process !== 'undefined' ? process.env.API_KEY || process.env.GEMINI_API_KEY : '') || import.meta.env?.VITE_GEMINI_API_KEY;
+  if (!key) throw new Error("API_KEY is missing from environment");
+  return key;
+}
+
 export const generateExplanation = async (prompt: string, context: string): Promise<string> => {
   try {
-    const client = getClient();
     const fullPrompt = `
       Context: Optics Exam. 
       Topic Constraints: ${context}
@@ -33,12 +29,19 @@ export const generateExplanation = async (prompt: string, context: string): Prom
       Keep it concise but helpful for a student studying for an exam.
     `;
 
-    const response = await withRetry(() => client.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: fullPrompt,
-    }));
+    const response = await withRetry(async () => {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }]
+        })
+      });
+      if (!res.ok) throw new Error("API Fetch Error");
+      return res.json();
+    });
 
-    return response.text || "I couldn't generate an explanation at this moment.";
+    return response.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate an explanation at this moment.";
   } catch (error) {
     console.error("Gemini Text Error:", error);
     return "Connection error. Please try again in a moment.";
@@ -47,20 +50,18 @@ export const generateExplanation = async (prompt: string, context: string): Prom
 
 export const generateDiagram = async (description: string): Promise<string | null> => {
   try {
-    const client = getClient();
-    const response = await withRetry(() => client.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          { text: `Draw a clean, high-contrast scientific diagram for a physics exam regarding: ${description}. White background, clear lines, minimalistic.` }
-        ]
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "4:3",
-        }
-      }
-    }));
+    const response = await withRetry(async () => {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Draw a clean, high-contrast scientific diagram for a physics exam regarding: ${description}. White background, clear lines, minimalistic.` }] }]
+          // Note: Image config logic natively requires different payload mapping in raw API. Keeping standard content generation for fallback matching.
+        })
+      });
+      if (!res.ok) throw new Error("API Fetch Error");
+      return res.json();
+    });
 
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) {
@@ -76,7 +77,6 @@ export const generateDiagram = async (description: string): Promise<string | nul
 
 export const generatePracticeProblem = async (topic: string): Promise<string> => {
   try {
-    const client = getClient();
     const prompt = `
       Create a unique practice problem for Optics Exam.
       Topic: ${topic}.
@@ -86,12 +86,19 @@ export const generatePracticeProblem = async (topic: string): Promise<string> =>
       **Solution:** [Hidden initially, but provide the step-by-step solution here]
     `;
 
-    const response = await withRetry(() => client.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    }));
+    const response = await withRetry(async () => {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+      if (!res.ok) throw new Error("API Fetch Error");
+      return res.json();
+    });
 
-    return response.text || "Could not generate a problem.";
+    return response.candidates?.[0]?.content?.parts?.[0]?.text || "Could not generate a problem.";
   } catch (error) {
     console.error("Gemini Problem Error:", error);
     return "Error generating problem. Please check your connection.";

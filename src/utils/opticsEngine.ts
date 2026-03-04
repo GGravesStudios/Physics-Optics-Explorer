@@ -15,6 +15,18 @@ export type OpticParams = {
 
 export const calculatePrincipalRays = (params: OpticParams): { rays: Ray[], q: number, m: number, type: string, description: string } => {
     const { objX, objY, f, opticType, subType, opticX } = params;
+
+    // 1. Infinity / NaN propagation failsafe
+    if (!isFinite(objX) || !isFinite(objY) || !isFinite(f)) {
+        return {
+            rays: [],
+            q: Infinity,
+            m: Infinity,
+            type: 'Invalid',
+            description: 'Object is at Infinity or undefined'
+        };
+    }
+
     const r: Ray[] = [];
     const VIEW_LIMIT = 2000;
 
@@ -22,12 +34,13 @@ export const calculatePrincipalRays = (params: OpticParams): { rays: Ray[], q: n
     const p = opticX - objX;
 
     let q = Infinity;
+    const isAtFocalPoint = Math.abs(p - f) <= 0.1;
     if (subType === 'plane') {
         q = -p;
-    } else if (Math.abs(p - f) > 0.1) {
+    } else if (!isAtFocalPoint) {
         q = (p * f) / (p - f);
     }
-    const absQ = isFinite(q) ? Math.abs(q) : VIEW_LIMIT;
+
 
     const m = isFinite(q) ? -q / p : Infinity;
     const isReal = (opticType === 'lens' && q > 0) || (opticType === 'mirror' && q > 0);
@@ -50,8 +63,9 @@ export const calculatePrincipalRays = (params: OpticParams): { rays: Ray[], q: n
 
             // Virtual traceback if virtual image
             if (q < 0 && isFinite(q)) {
-                const backY1 = objY + slope1 * (-VIEW_LIMIT);
-                r.push({ x1: opticX, y1: objY, x2: opticX - VIEW_LIMIT, y2: backY1, stroke: C_VIRTUAL, dashed: true });
+                const imgX = opticX + q;
+                const imgY = objY + slope1 * (imgX - opticX); // Actually just m * objY, but slope works too
+                r.push({ x1: opticX, y1: objY, x2: imgX, y2: imgY, stroke: C_VIRTUAL, dashed: true });
             }
         } else {
             // Diverging: Refracts as if coming from front focal point (x = opticX - fMag, y = 0)
@@ -59,21 +73,24 @@ export const calculatePrincipalRays = (params: OpticParams): { rays: Ray[], q: n
             const exitY1 = objY + slope1 * VIEW_LIMIT;
             r.push({ x1: opticX, y1: objY, x2: opticX + VIEW_LIMIT, y2: exitY1, stroke: C_REFRACTED });
 
-            // Virtual traceback to front focal point
-            r.push({ x1: opticX, y1: objY, x2: opticX - VIEW_LIMIT, y2: objY + slope1 * (-VIEW_LIMIT), stroke: C_VIRTUAL, dashed: true });
+            // Virtual traceback to virtual image
+            if (isFinite(q)) {
+                const imgX = opticX + q;
+                const imgY = objY + slope1 * (imgX - opticX);
+                r.push({ x1: opticX, y1: objY, x2: imgX, y2: imgY, stroke: C_VIRTUAL, dashed: true });
+            }
         }
 
-        // Ray 2: Through Optical Center (undeviated)
-        const slope2 = objY / (objX - opticX);
-        const exitY2 = slope2 * VIEW_LIMIT;
-        r.push({ x1: objX, y1: objY, x2: opticX + VIEW_LIMIT, y2: exitY2, stroke: C_INCIDENT });
+        // Ray 2: Through Optical Center (undeviated) - ONLY drawn if at focal point
+        if (isAtFocalPoint) {
+            const slope2 = objY / (objX - opticX);
+            const exitY2 = slope2 * VIEW_LIMIT;
+            r.push({ x1: objX, y1: objY, x2: opticX + VIEW_LIMIT, y2: exitY2, stroke: C_INCIDENT });
 
-        // Technically changes from Incident -> Refracted once it crosses OpticX
-        r.push({ x1: opticX, y1: slope2 * (opticX - objX) + objY, x2: opticX + VIEW_LIMIT, y2: slope2 * VIEW_LIMIT, stroke: C_REFRACTED, opacity: 0.0 }); // Dummy stroke for code structure
+            // Technically changes from Incident -> Refracted once it crosses OpticX
+            r.push({ x1: opticX, y1: slope2 * (opticX - objX) + objY, x2: opticX + VIEW_LIMIT, y2: slope2 * VIEW_LIMIT, stroke: C_REFRACTED, opacity: 0.0 }); // Dummy stroke for code structure
 
-        if (q < 0 && isFinite(q)) {
-            // Traceback
-            r.push({ x1: opticX, y1: 0, x2: opticX - VIEW_LIMIT, y2: slope2 * -VIEW_LIMIT, stroke: C_VIRTUAL, dashed: true });
+            // Note: Since q is Infinity here, it will never trace back virtually
         }
 
         // Ray 3: Through/Towards Focal Point
@@ -88,7 +105,9 @@ export const calculatePrincipalRays = (params: OpticParams): { rays: Ray[], q: n
 
                 // Traceback
                 if (q < 0 && isFinite(q)) {
-                    r.push({ x1: opticX, y1: hitY3, x2: opticX - VIEW_LIMIT, y2: hitY3, stroke: C_VIRTUAL, dashed: true });
+                    const imgX = opticX + q;
+                    const imgY = hitY3; // Ray refracts parallel, so y is constant
+                    r.push({ x1: opticX, y1: hitY3, x2: imgX, y2: imgY, stroke: C_VIRTUAL, dashed: true });
                 }
             }
 
@@ -106,7 +125,9 @@ export const calculatePrincipalRays = (params: OpticParams): { rays: Ray[], q: n
 
             // Traceback
             if (q < 0 && isFinite(q)) {
-                r.push({ x1: opticX, y1: hitY3, x2: opticX - VIEW_LIMIT, y2: hitY3, stroke: C_VIRTUAL, dashed: true });
+                const imgX = opticX + q;
+                const imgY = hitY3; // parallel
+                r.push({ x1: opticX, y1: hitY3, x2: imgX, y2: imgY, stroke: C_VIRTUAL, dashed: true });
             }
         }
 
@@ -140,13 +161,20 @@ export const calculatePrincipalRays = (params: OpticParams): { rays: Ray[], q: n
                 r.push({ x1: opticX, y1: objY, x2: opticX - VIEW_LIMIT, y2: objY + slope1 * (-VIEW_LIMIT), stroke: C_REFRACTED });
 
                 if (q < 0 && isFinite(q)) {
-                    r.push({ x1: opticX, y1: objY, x2: opticX + VIEW_LIMIT, y2: objY + slope1 * VIEW_LIMIT, stroke: C_VIRTUAL, dashed: true });
+                    const imgX = opticX - q; // Mirrors form virtual images behind it (+x direction relative to opticX, so opticX - q since q is negative)
+                    const imgY = objY + slope1 * (imgX - opticX);
+                    r.push({ x1: opticX, y1: objY, x2: imgX, y2: imgY, stroke: C_VIRTUAL, dashed: true });
                 }
             } else {
                 // Reflects as if coming from F at (fX, 0)
                 const slope1 = (0 - objY) / (fX - opticX);
                 r.push({ x1: opticX, y1: objY, x2: opticX - VIEW_LIMIT, y2: objY + slope1 * (-VIEW_LIMIT), stroke: C_REFRACTED });
-                r.push({ x1: opticX, y1: objY, x2: opticX + VIEW_LIMIT, y2: objY + slope1 * VIEW_LIMIT, stroke: C_VIRTUAL, dashed: true });
+
+                if (isFinite(q)) {
+                    const imgX = opticX - q;
+                    const imgY = objY + slope1 * (imgX - opticX);
+                    r.push({ x1: opticX, y1: objY, x2: imgX, y2: imgY, stroke: C_VIRTUAL, dashed: true });
+                }
             }
 
             // Ray 2: Through Focal Point -> Parallel
@@ -163,18 +191,19 @@ export const calculatePrincipalRays = (params: OpticParams): { rays: Ray[], q: n
                 r.push({ x1: opticX, y1: hitY2, x2: opticX - VIEW_LIMIT, y2: hitY2, stroke: C_REFRACTED });
 
                 if ((isConcave && q < 0 && isFinite(q)) || !isConcave) {
-                    r.push({ x1: opticX, y1: hitY2, x2: opticX + VIEW_LIMIT, y2: hitY2, stroke: C_VIRTUAL, dashed: true });
+                    const imgX = opticX - q;
+                    const imgY = hitY2; // parallel
+                    r.push({ x1: opticX, y1: hitY2, x2: imgX, y2: imgY, stroke: C_VIRTUAL, dashed: true });
                 }
             }
 
-            // Ray 3: Vertex (i=r)
-            const slope3 = objY / (objX - opticX);
-            const reflSlope3 = -slope3;
-            r.push({ x1: objX, y1: objY, x2: opticX, y2: 0, stroke: C_INCIDENT });
-            r.push({ x1: opticX, y1: 0, x2: opticX - VIEW_LIMIT, y2: reflSlope3 * -VIEW_LIMIT, stroke: C_REFRACTED });
-
-            if ((isConcave && q < 0 && isFinite(q)) || !isConcave) {
-                r.push({ x1: opticX, y1: 0, x2: opticX + VIEW_LIMIT, y2: slope3 * VIEW_LIMIT, stroke: C_VIRTUAL, dashed: true });
+            // Ray 3: Vertex (i=r) - ONLY drawn if at focal point
+            if (isAtFocalPoint) {
+                const slope3 = objY / (objX - opticX);
+                const reflSlope3 = -slope3;
+                r.push({ x1: objX, y1: objY, x2: opticX, y2: 0, stroke: C_INCIDENT });
+                r.push({ x1: opticX, y1: 0, x2: opticX - VIEW_LIMIT, y2: reflSlope3 * -VIEW_LIMIT, stroke: C_REFRACTED });
+                // Note: Since q is Infinity here, it will never trace back virtually
             }
         }
     }

@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import MathDisplay from './MathDisplay';
-import { calculatePrincipalRays, OpticParams, Ray, C_INCIDENT } from '../src/utils/opticsEngine';
+import { calculatePrincipalRays, OpticParams, Ray, C_INCIDENT, C_REFRACTED } from '../src/utils/opticsEngine';
 
 type SystemMode = 'single' | 'slab' | 'two-lens';
 
@@ -56,7 +56,7 @@ const RayOpticsSim: React.FC = () => {
     // --- Physics Engines (Memoized) ---
 
     // 1. Single Lens/Mirror Calculation
-    const singleOpticResult = useMemo(() => {
+    const singleOpticResult = useMemo<{ rays: Ray[], q: number, m: number, type: string, description: string }>(() => {
         const params: OpticParams = {
             objX: -objDist,
             objY: objHeight,
@@ -69,7 +69,7 @@ const RayOpticsSim: React.FC = () => {
     }, [objDist, objHeight, focalLengthMag, opticType, subType]);
 
     // 2. Two-Lens System Calculation
-    const twoLensResult = useMemo(() => {
+    const twoLensResult = useMemo<{ l1Result: { rays: Ray[], q: number, m: number, type: string, description: string }, l2Result: { rays: Ray[], q: number, m: number, type: string, description: string }, M_total: number, q1: number, p2: number, q2: number }>(() => {
         // Lens 1
         const p1: OpticParams = {
             objX: -objDist,
@@ -118,7 +118,7 @@ const RayOpticsSim: React.FC = () => {
 
 
     // --- Ray Tracing Generation (Memoized) ---
-    const rays = useMemo(() => {
+    const rays = useMemo<Ray[]>(() => {
         const r: Ray[] = [];
         const VIEW_LIMIT = 2000;
 
@@ -149,14 +149,28 @@ const RayOpticsSim: React.FC = () => {
 
         } else if (systemMode === 'two-lens') {
             // Lens 1 Rays
-            r.push(...twoLensResult.l1Result.rays);
+            const clippedL1Rays: Ray[] = twoLensResult.l1Result.rays.map((ray: Ray) => {
+                if (ray.stroke === C_REFRACTED) {
+                    if (twoLensResult.q1 > 0 && isFinite(twoLensResult.q1)) {
+                        // Terminate at intermediate image exactly
+                        return { ...ray, x2: twoLensResult.q1, y2: twoLensResult.l1Result.m * objHeight } as Ray;
+                    } else if (ray.x2 > lensSep) {
+                        // Virtual or infinite: clip at Lens 2 so they don't clutter everything past it
+                        const slope = (ray.y2 - ray.y1) / (ray.x2 - ray.x1);
+                        const yAtLens2 = ray.y1 + slope * (lensSep - ray.x1);
+                        return { ...ray, x2: lensSep, y2: yAtLens2 } as Ray;
+                    }
+                }
+                return ray;
+            });
+            r.push(...clippedL1Rays);
 
-            // Render virtual traceback from Lens 2 (Optional filtering could happen here)
-            r.push(...twoLensResult.l2Result.rays.map(ray => ({
+            // Render virtual traceback from Lens 2
+            r.push(...twoLensResult.l2Result.rays.map((ray: Ray) => ({
                 ...ray,
                 // Color virtual extensions clearly
                 stroke: ray.stroke === C_INCIDENT ? "#f59e0b" : ray.stroke // Orange for incident to L2
-            })));
+            } as Ray)));
         }
 
         return r;
@@ -211,8 +225,8 @@ const RayOpticsSim: React.FC = () => {
         setIsDragging(false);
     };
 
-    const autoFitView = () => {
-        if (rays.length === 0) return;
+    const getDefaultBounds = (currentRays: Ray[]) => {
+        if (currentRays.length === 0) return { x: -400, y: -250, w: 800, h: 500 };
 
         let minX = -objDist;
         let maxX = 0;
@@ -220,24 +234,11 @@ const RayOpticsSim: React.FC = () => {
         let maxY = objHeight;
 
         // Traverse all rays to find bounds
-        rays.forEach(r => {
-            // Don't let infinite beams ruin the bounds
-            if (r.x1 > -5000 && r.x1 < 5000) {
-                minX = Math.min(minX, r.x1);
-                maxX = Math.max(maxX, r.x1);
-            }
-            if (r.x2 > -5000 && r.x2 < 5000) {
-                minX = Math.min(minX, r.x2);
-                maxX = Math.max(maxX, r.x2);
-            }
-            if (r.y1 > -5000 && r.y1 < 5000) {
-                minY = Math.min(minY, r.y1);
-                maxY = Math.max(maxY, r.y1);
-            }
-            if (r.y2 > -5000 && r.y2 < 5000) {
-                minY = Math.min(minY, r.y2);
-                maxY = Math.max(maxY, r.y2);
-            }
+        currentRays.forEach(r => {
+            if (r.x1 > -5000 && r.x1 < 5000) { minX = Math.min(minX, r.x1); maxX = Math.max(maxX, r.x1); }
+            if (r.x2 > -5000 && r.x2 < 5000) { minX = Math.min(minX, r.x2); maxX = Math.max(maxX, r.x2); }
+            if (r.y1 > -5000 && r.y1 < 5000) { minY = Math.min(minY, r.y1); maxY = Math.max(maxY, r.y1); }
+            if (r.y2 > -5000 && r.y2 < 5000) { minY = Math.min(minY, r.y2); maxY = Math.max(maxY, r.y2); }
         });
 
         // Ensure focal points are included
@@ -274,19 +275,23 @@ const RayOpticsSim: React.FC = () => {
         // SVG Y is inverted and center is weird, so we roughly balance
         const finalY = (minY + maxY) / 2 - (finalH / 2);
 
-        setViewBox({
-            x: finalX,
-            y: finalY,
-            w: finalW,
-            h: finalH
-        });
+        return { x: finalX, y: finalY, w: finalW, h: finalH };
     };
 
-    // Auto-fit on significant layout changes
+    const autoFitView = () => {
+        setViewBox(getDefaultBounds(rays));
+    };
+
+    // Viewport Initialization Bug Fix: Run ONCE on mount using a boolean flag
+    const hasInitializedView = useRef(false);
+
     useEffect(() => {
-        autoFitView();
+        if (!hasInitializedView.current && rays.length > 0) {
+            hasInitializedView.current = true;
+            autoFitView();
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [systemMode]);
+    }, [rays]); // We watch rays so that the first valid ray calculation triggers the fit. HasInitialized prevents loops.
 
 
     return (
@@ -632,21 +637,22 @@ const RayOpticsSim: React.FC = () => {
 
                                 {/* Images */}
                                 {isFinite(twoLensResult.q1) && (
-                                    <g opacity={0.7}>
+                                    <g opacity={0.6}>
                                         <line
                                             x1={twoLensResult.q1} // Q1 is calculated relative to Lens 1 (which is at x=0)
                                             y1="0"
                                             x2={twoLensResult.q1}
                                             y2={twoLensResult.l1Result.m * objHeight}
-                                            stroke="#cbd5e1"
+                                            stroke="#f59e0b"
                                             strokeWidth="2"
                                             strokeDasharray="4"
                                         />
                                         <circle
                                             cx={twoLensResult.q1}
                                             cy={twoLensResult.l1Result.m * objHeight}
-                                            r="3"
-                                            fill="#94a3b8" />
+                                            r="4"
+                                            fill="#f59e0b" />
+                                        <text x={twoLensResult.q1} y={twoLensResult.l1Result.m * objHeight > 0 ? twoLensResult.l1Result.m * objHeight + 15 : twoLensResult.l1Result.m * objHeight - 15} textAnchor="middle" fill="#f59e0b" fontSize="11" fontWeight="bold" transform="scale(1,-1)">Intermediate</text>
                                     </g>
                                 )}
                                 {isFinite(twoLensResult.q2) && (
