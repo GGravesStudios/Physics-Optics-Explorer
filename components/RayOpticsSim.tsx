@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import MathDisplay from './MathDisplay';
-import { calculatePrincipalRays, OpticParams, Ray, C_INCIDENT, C_REFRACTED, C_VIRTUAL } from '../src/utils/opticsEngine';
+import { calculatePrincipalRays, OpticParams, Ray, C_INCIDENT } from '../src/utils/opticsEngine';
 
 type SystemMode = 'single' | 'slab' | 'two-lens';
 
